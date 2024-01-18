@@ -11,6 +11,7 @@ from src.utils import setup_device, TensorboardWriter, MetricTracker, load_check
 import random
 from my_convit import OOD_VisionTransformer
 import os
+from loss import triplet_loss
 
 
 def run_model(model, loader):
@@ -30,12 +31,12 @@ def run_model(model, loader):
 
         out_list.append(output.data)
         tgt_list.append(target)
-        ood_list.append(ood_output.data)
+        # ood_list.append(ood_output.data)
 
     return torch.cat(out_list), torch.cat(tgt_list), torch.cat(ood_list)
 
 
-def train_epoch(epoch, model, data_loader, criterion, optimizer, lr_scheduler, metrics, classes_mean,
+def train_epoch(epoch, model, data_loader, criterion, optimizer, lr_scheduler, metrics, classes_mean,ood_loss,
                 device=torch.device('cpu')):
     metrics.reset()
 
@@ -48,10 +49,15 @@ def train_epoch(epoch, model, data_loader, criterion, optimizer, lr_scheduler, m
 
         optimizer.zero_grad()
         batch_pred, ood_pred = model(batch_data)
-        mean = classes_mean[batch_target]
+        # mean = classes_mean[batch_target]
 
         # todo: let the criterion rewritable
-        loss = criterion(batch_pred, mean)
+        # loss = criterion(batch_pred, mean)
+        if ood_loss :
+            loss_from_ood = ood_loss(ood_pred,batch_ood)
+        else:
+            loss_from_ood = 0
+        loss = loss_from_ood
 
         loss.backward()
         optimizer.step()
@@ -197,18 +203,21 @@ def main(config, device, device_ids):
     # create dataloader
     config.model = 'vit'
 
-    train_emb, train_targets, ood_detect = run_model(model, train_dataloader)
-
-    in_classes = torch.unique(train_targets)
-    class_idx = [torch.nonzero(torch.eq(cls, train_targets)).squeeze(dim=1) for cls in in_classes]
-    classes_feats = [train_emb[idx] for idx in class_idx]
-    classes_mean = torch.stack([torch.mean(cls_feats, dim=0) for cls_feats in classes_feats], dim=0)
+    # train_emb, train_targets, ood_detect = run_model(model, train_dataloader)
+    #
+    # in_classes = torch.unique(train_targets)
+    # class_idx = [torch.nonzero(torch.eq(cls, train_targets)).squeeze(dim=1) for cls in in_classes]
+    # classes_feats = [train_emb[idx] for idx in class_idx]
+    # classes_mean = torch.stack([torch.mean(cls_feats, dim=0) for cls_feats in classes_feats], dim=0)
+    classes_mean = []
 
     # training criterion
     print("create criterion and optimizer")
 
     # todo: this is where to change the loss
     criterion = torch.nn.MSELoss().to(device)
+
+    ood_loss = triplet_loss
 
     # create optimizers and learning rate scheduler
     if config.opt == "AdamW":
@@ -241,12 +250,12 @@ def main(config, device, device_ids):
         # train the model
         model.train()
         result = train_epoch(epoch, model, train_dataloader, criterion, optimizer, lr_scheduler, train_metrics,
-                             classes_mean, device)
+                             classes_mean, ood_loss,device)
         log.update(result)
 
         # validate the model
         model.eval()
-        result = valid_epoch(epoch, model, valid_dataloader, criterion, valid_metrics, classes_mean, device)
+        result = valid_epoch(epoch, model, valid_dataloader, criterion, valid_metrics, classes_mean, ood_loss, device)
         log.update(**{'val_' + k: v for k, v in result.items()})
 
         # best acc

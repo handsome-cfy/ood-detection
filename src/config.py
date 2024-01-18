@@ -22,8 +22,8 @@ def get_train_config():
     parser.add_argument("--wd", type=float, default=1e-4, help='weight decay')
     parser.add_argument("--warmup-steps", type=int, default=500, help='learning rate warm up steps')
     parser.add_argument("--data-dir", type=str, default='./data', help='data folder')
-    parser.add_argument("--dataset", type=str, default='ImageNet', help="dataset for fine-tunning/evaluation")
-    parser.add_argument("--num-classes", type=int, default=1000, help="number of classes in dataset")
+    parser.add_argument("--dataset", type=str, default='cifar100', help="dataset for fine-tunning/evaluation")
+    parser.add_argument("--num-classes", type=int, default=100, help="number of classes in dataset")
     parser.add_argument("--random-seed", type=int, default=42, help="random seed for choosing the training classes")
     parser.add_argument('--model_name', default='vit_base_patch16_224', type=str,
                         help="ViT pre-trained model type")
