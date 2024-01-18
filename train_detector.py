@@ -71,7 +71,7 @@ def train_epoch(epoch, model, data_loader, criterion, optimizer, lr_scheduler, m
     return metrics.result()
 
 
-def valid_epoch(epoch, model, data_loader, criterion, metrics, classes_mean, device=torch.device('cpu')):
+def valid_epoch(epoch, model, data_loader, criterion, metrics, classes_mean,ood_loss, device=torch.device('cpu')):
     metrics.reset()
     losses = []
     # validation loop
@@ -82,8 +82,13 @@ def valid_epoch(epoch, model, data_loader, criterion, metrics, classes_mean, dev
             batch_ood = batch_ood.to(device)
 
             batch_pred, ood_pred = model(batch_data)
-            mean = classes_mean[batch_target]
-            loss = criterion(batch_pred, mean)
+            # mean = classes_mean[batch_target]
+            # loss = criterion(batch_pred, mean)
+            if ood_loss:
+                loss_from_ood = ood_loss(ood_pred, batch_ood)
+            else:
+                loss_from_ood = 0
+            loss = loss_from_ood
             losses.append(loss.item())
 
     loss = np.mean(losses)
@@ -99,7 +104,7 @@ def save_model(save_dir, epoch, model, optimizer, lr_scheduler, classes_mean, de
         'state_dict': model.state_dict() if len(device_ids) <= 1 else model.module.state_dict(),
         'optimizer': optimizer.state_dict(),
         'lr_scheduler': None if lr_scheduler is None else lr_scheduler.state_dict(),
-        'classes_mean': classes_mean.cpu()
+        # 'classes_mean': classes_mean.cpu()
     }
     filename = str(save_dir + 'ckpt_epoch_current.pth')
     torch.save(state, filename)
