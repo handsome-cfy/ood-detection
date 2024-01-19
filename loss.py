@@ -30,5 +30,5 @@ def triplet_loss(features, labels, margin=1.0):
             triplet_loss = torch.clamp(positive_distance - negative_distance + margin, min=0.0)
             loss += triplet_loss
 
-    loss = torch.tensor(loss,requires_grad=True)
+    # loss = torch.tensor(loss,requires_grad=True)
     return loss

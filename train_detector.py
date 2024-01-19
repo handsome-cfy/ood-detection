@@ -27,7 +27,7 @@ def run_model(model, loader):
 
         # todo how to use ood_label here
         with torch.no_grad():
-            output,ood_output = model(images)
+            output, ood_output = model(images)
 
         out_list.append(output.data)
         tgt_list.append(target)
@@ -36,7 +36,7 @@ def run_model(model, loader):
     return torch.cat(out_list), torch.cat(tgt_list), torch.cat(ood_list)
 
 
-def train_epoch(epoch, model, data_loader, criterion, optimizer, lr_scheduler, metrics, classes_mean,ood_loss,
+def train_epoch(epoch, model, data_loader, criterion, optimizer, lr_scheduler, metrics, classes_mean, ood_loss,
                 device=torch.device('cpu')):
     metrics.reset()
 
@@ -52,12 +52,12 @@ def train_epoch(epoch, model, data_loader, criterion, optimizer, lr_scheduler, m
         # mean = classes_mean[batch_target]
 
         # todo: let the criterion rewritable
-        # loss = criterion(batch_pred, mean)
-        if ood_loss :
-            loss_from_ood = ood_loss(ood_pred,batch_ood)
+        loss = criterion(batch_pred, batch_target)
+        if ood_loss:
+            loss_from_ood = ood_loss(ood_pred, batch_target)
         else:
             loss_from_ood = 0
-        loss = loss_from_ood
+        loss += loss_from_ood
 
         loss.backward()
         optimizer.step()
@@ -71,7 +71,7 @@ def train_epoch(epoch, model, data_loader, criterion, optimizer, lr_scheduler, m
     return metrics.result()
 
 
-def valid_epoch(epoch, model, data_loader, criterion, metrics, classes_mean,ood_loss, device=torch.device('cpu')):
+def valid_epoch(epoch, model, data_loader, criterion, metrics, classes_mean, ood_loss, device=torch.device('cpu')):
     metrics.reset()
     losses = []
     # validation loop
@@ -83,12 +83,12 @@ def valid_epoch(epoch, model, data_loader, criterion, metrics, classes_mean,ood_
 
             batch_pred, ood_pred = model(batch_data)
             # mean = classes_mean[batch_target]
-            # loss = criterion(batch_pred, mean)
+            loss = criterion(batch_pred, batch_target)
             if ood_loss:
-                loss_from_ood = ood_loss(ood_pred, batch_ood)
+                loss_from_ood = ood_loss(ood_pred, batch_target)
             else:
                 loss_from_ood = 0
-            loss = loss_from_ood
+            loss += loss_from_ood
             losses.append(loss.item())
 
     loss = np.mean(losses)
@@ -220,7 +220,7 @@ def main(config, device, device_ids):
     print("create criterion and optimizer")
 
     # todo: this is where to change the loss
-    criterion = torch.nn.MSELoss().to(device)
+    criterion = torch.nn.CrossEntropyLoss().to(device)
 
     ood_loss = triplet_loss
 
@@ -255,7 +255,7 @@ def main(config, device, device_ids):
         # train the model
         model.train()
         result = train_epoch(epoch, model, train_dataloader, criterion, optimizer, lr_scheduler, train_metrics,
-                             classes_mean, ood_loss,device)
+                             classes_mean, ood_loss, device)
         log.update(result)
 
         # validate the model

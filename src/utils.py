@@ -41,7 +41,8 @@ def process_config(config):
     exp_name += ('_' + timestamp)
 
     # create some important directories to be used for that experiments
-    config.summary_dir = os.path.join('experiments', 'tb', exp_name)
+    # config.summary_dir = os.path.join('experiments', 'tb', exp_name)
+    config.summary_dir = os.path.join('experiments','tb',timestamp)
     config.checkpoint_dir = os.path.join('experiments', 'save', exp_name, 'checkpoints/')
     config.result_dir = os.path.join('experiments', 'save', exp_name, 'results/')
     for dir in [config.summary_dir, config.checkpoint_dir, config.result_dir]:

@@ -8,7 +8,7 @@ def get_train_config():
     # basic config
     parser.add_argument("--exp-name", type=str, default="ft", help="experiment name")
     parser.add_argument("--n-gpu", type=int, default=1, help="number of gpus to use")
-    parser.add_argument("--tensorboard", default=False, action='store_true', help='flag of turnning on tensorboard')
+    parser.add_argument("--tensorboard", default=True, action='store_true', help='flag of turnning on tensorboard')
     parser.add_argument("--model-arch", type=str, default="b16", help='model setting to use',
                         choices=['t16', 'vs16', 's16', 'b16', 'b32', 'l16', 'l32', 'h14'])
     parser.add_argument("--checkpoint-path", type=str, default=None, help="model checkpoint to load weights")
