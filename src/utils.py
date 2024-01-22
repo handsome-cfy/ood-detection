@@ -63,7 +63,7 @@ class MetricTracker:
         for col in self._data.columns:
             self._data[col].values[:] = 0
 
-    def update(self, key, value, step, n=1):
+    def update(self, key, value, step=None, n=1):
         if self.writer is not None:
             self.writer.add_scalar(key, value, step)
         self._data.total[key] += value * n

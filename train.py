@@ -82,20 +82,22 @@ def train_epoch(epoch, model, data_loader, criterion, optimizer, lr_scheduler, m
         optimizer.step()
         if lr_scheduler is not None:
             lr_scheduler.step()
-        # torch.cuda.empty_cache()
-        if step_accumlate == 0:
-            step_accumlate = write_step
-            if metrics.writer is not None:
-                for inx in range(start_step, batch_idx):
-                    # metrics.writer.set_step((epoch - 1) * len(data_loader) + inx)
-                    metrics.update('loss', loss_list[inx - start_step], inx)
-                start_step = batch_idx
-                loss_list = []
+        torch.cuda.empty_cache()
+
+        # if step_accumlate == 0:
+        #     step_accumlate = write_step
+        #     if metrics.writer is not None:
+        #         for inx in range(start_step, batch_idx):
+        #             # metrics.writer.set_step((epoch - 1) * len(data_loader) + inx)
+        #             start_step = batch_idx
+        #         loss_list = []
 
         step_accumlate -= 1
-        loss_list.append(loss.item())
+        # loss_list.append(loss.item())
         if metrics.writer is not None:
             metrics.writer.set_step((epoch - 1) * len(data_loader) + batch_idx)
+        metrics.update('loss', loss.item())
+
 
     acc = num_correct / num_total
     metrics.update('accuracy', acc, epoch)
