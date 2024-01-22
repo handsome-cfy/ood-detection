@@ -11,7 +11,8 @@ from src.utils import setup_device, TensorboardWriter, MetricTracker, load_check
 import random
 from my_convit import OOD_VisionTransformer
 import os
-from loss import triplet_loss
+from loss import triplet_loss, cosine_loss
+from utils import accuracy_correct
 
 
 def run_model(model, loader):
@@ -36,65 +37,111 @@ def run_model(model, loader):
     return torch.cat(out_list), torch.cat(tgt_list), torch.cat(ood_list)
 
 
-def train_epoch(epoch, model, data_loader, criterion, optimizer, lr_scheduler, metrics, classes_mean, ood_loss,
+def train_epoch(epoch, model, data_loader, criterion, optimizer, lr_scheduler, metrics, classes_mean, ood_token_loss,
+                write_step,
                 device=torch.device('cpu')):
     metrics.reset()
 
     # training loop
+
+    # try to control write
+    step_accumlate = write_step
+    start_step = 0
+    loss_list = []
+
+    num_correct = 0
+    num_total = 0
     for batch_idx, (batch_data, batch_target, batch_ood) in enumerate(tqdm(data_loader)):
         batch_data = batch_data.to(device)
         batch_target = batch_target.to(device)
-        # todo: ood label
+
+        # ood classfication
         batch_ood = batch_ood.to(device)
 
         optimizer.zero_grad()
-        batch_pred, ood_pred = model(batch_data)
+
+        batch_pred, ood_pred, ood_token = model(batch_data)
         # mean = classes_mean[batch_target]
 
-        # todo: let the criterion rewritable
-        loss = criterion(batch_pred, batch_target)
-        if ood_loss:
-            loss_from_ood = ood_loss(ood_pred, batch_target)
+        class_loss = criterion(batch_pred, batch_target)
+
+        # caculate to make the In and OOD token different
+        if ood_token_loss:
+            loss_from_ood = ood_token_loss(ood_token, batch_ood)
         else:
             loss_from_ood = 0
-        loss += loss_from_ood
+
+        loss_from_ood_class = criterion(ood_pred, batch_ood)
+        loss = class_loss + loss_from_ood + loss_from_ood_class
+
+        correct, total = accuracy_correct(ood_pred, batch_ood)
+        num_total += total
+        num_correct += correct
 
         loss.backward()
         optimizer.step()
         if lr_scheduler is not None:
             lr_scheduler.step()
-        # torch.cuda.empty_cache()
         if metrics.writer is not None:
             metrics.writer.set_step((epoch - 1) * len(data_loader) + batch_idx)
-        metrics.update('loss', loss.item())
+        # torch.cuda.empty_cache()
+        if step_accumlate == 0:
+            step_accumlate = write_step
+            if metrics.writer is not None:
+                for inx in range(start_step, batch_idx):
+                    # metrics.writer.set_step((epoch - 1) * len(data_loader) + inx)
+                    metrics.update('loss', loss_list[inx - start_step])
+                start_step = batch_idx
+                loss_list = []
 
+        step_accumlate -= 1
+        loss_list.append(loss.item())
+
+    acc = num_correct / len(data_loader)
+    metrics.update('accuracy', acc)
     return metrics.result()
 
 
-def valid_epoch(epoch, model, data_loader, criterion, metrics, classes_mean, ood_loss, device=torch.device('cpu')):
+def valid_epoch(epoch, model, data_loader, criterion, metrics, classes_mean, ood_token_loss,
+                device=torch.device('cpu')):
     metrics.reset()
     losses = []
     # validation loop
+    num_correct = 0
+    num_total = 0
+
     with torch.no_grad():
         for batch_idx, (batch_data, batch_target, batch_ood) in enumerate(tqdm(data_loader)):
             batch_data = batch_data.to(device)
             batch_target = batch_target.to(device)
             batch_ood = batch_ood.to(device)
 
-            batch_pred, ood_pred = model(batch_data)
+            batch_pred, ood_pred, ood_token = model(batch_data)
             # mean = classes_mean[batch_target]
-            loss = criterion(batch_pred, batch_target)
-            if ood_loss:
-                loss_from_ood = ood_loss(ood_pred, batch_target)
+            class_loss = criterion(batch_pred, batch_target)
+
+            # caculate to make the In and OOD token different
+            if ood_token_loss:
+                loss_from_ood = ood_token_loss(ood_token, batch_ood)
             else:
                 loss_from_ood = 0
-            loss += loss_from_ood
+
+            loss_from_ood_class = criterion(ood_pred, batch_ood)
+            loss = class_loss + loss_from_ood + loss_from_ood_class
             losses.append(loss.item())
+
+            correct, total = accuracy_correct(ood_pred, batch_ood)
+            num_total += total
+            num_correct += correct
 
     loss = np.mean(losses)
     if metrics.writer is not None:
         metrics.writer.set_step(epoch, 'valid')
     metrics.update('loss', loss)
+
+    acc = num_correct / num_total
+    metrics.update('accuracy', acc)
+
     return metrics.result()
 
 
@@ -128,6 +175,7 @@ def main(config, device, device_ids):
     train_metrics = MetricTracker(*[metric for metric in metric_names], writer=writer)
     valid_metrics = MetricTracker(*[metric for metric in metric_names], writer=writer)
 
+    write_step = config.write_step
     # create model
     print("create model")
     # model = OODTransformer(
@@ -175,9 +223,6 @@ def main(config, device, device_ids):
     # for param in model.embedding.parameters():
     #     param.requires_grad = False
 
-    model.cls_token.requires_grad = False
-
-    # todo: change here to fit our dataset set
     train_dataset = None
     valid_dataset = None
     if config.dataset == 'DomainNet':
@@ -208,12 +253,6 @@ def main(config, device, device_ids):
     # create dataloader
     config.model = 'vit'
 
-    # train_emb, train_targets, ood_detect = run_model(model, train_dataloader)
-    #
-    # in_classes = torch.unique(train_targets)
-    # class_idx = [torch.nonzero(torch.eq(cls, train_targets)).squeeze(dim=1) for cls in in_classes]
-    # classes_feats = [train_emb[idx] for idx in class_idx]
-    # classes_mean = torch.stack([torch.mean(cls_feats, dim=0) for cls_feats in classes_feats], dim=0)
     classes_mean = []
 
     # training criterion
@@ -222,8 +261,11 @@ def main(config, device, device_ids):
     # todo: this is where to change the loss
     criterion = torch.nn.CrossEntropyLoss().to(device)
 
-    ood_loss = triplet_loss
-
+    # ood_loss = triplet_loss
+    if config.loss_type == "cosine_loss":
+        ood_loss = cosine_loss
+    else:
+        ood_loss = triplet_loss
     # create optimizers and learning rate scheduler
     if config.opt == "AdamW":
         print("Using AdmW optimizer")
@@ -255,7 +297,7 @@ def main(config, device, device_ids):
         # train the model
         model.train()
         result = train_epoch(epoch, model, train_dataloader, criterion, optimizer, lr_scheduler, train_metrics,
-                             classes_mean, ood_loss, device)
+                             classes_mean, ood_loss, write_step, device)
         log.update(result)
 
         # validate the model

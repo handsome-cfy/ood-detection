@@ -107,7 +107,7 @@ class Cifar10_SVHN(Dataset):
 
 
 class Cifar100(Dataset):
-    def __init__(self, data_root, train=True, download=True, ID_index=10):
+    def __init__(self, data_root, train=True, download=True, ID_index=30):
         self.dataset = torchvision.datasets.CIFAR100(
             root=data_root, train=train, download=download,
         )

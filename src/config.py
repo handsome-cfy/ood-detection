@@ -31,7 +31,8 @@ def get_train_config():
     parser.add_argument('--opt', default='SGD', type=str, choices=('AdamW', 'SGD'))
     parser.add_argument('--save_freq', type=int, default=50, help='save frequency')
     parser.add_argument("--label-smoothing", type=float, default=0, help='label smoothing')
-
+    parser.add_argument("--loss_type",type=str,default="normal",help='the loss function for ood train')
+    parser.add_argument("--write_step",type=int,default=50,help='write frequency')
     # * Mixup params
     # parser.add_argument('--smoothing', type=float, default=0.0, help='Label smoothing (default: 0)') # later we can try it wd >0
     # parser.add_argument('--mixup', type=float, default=0.0,

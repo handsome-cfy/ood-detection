@@ -168,7 +168,7 @@ class OOD_VisionTransformer(nn.Module):
 
         for u, blk in enumerate(self.blocks):
             if u == self.local_up_to_layer:
-            # if u == 0:
+                # if u == 0:
                 x = torch.cat((cls_tokens, x), dim=1)
             x = blk(x)
 
@@ -182,20 +182,17 @@ class OOD_VisionTransformer(nn.Module):
         x = self.forward_features(x)
         # ood detect
         ood = self.forward_ood_semantic(x)
-        # ood_output = ood
+
         ood_token = torch.stack(ood, 1)
-        # ood_token = torch.permute(ood_token,dims=[1,0,2])
-        ood_output = ood_token
-        #
-        # tmp = x[:, 0]
-        # ood_token = torch.flatten(ood_token, start_dim=1)
-        # # ood_token = torch.squeeze(ood_token, dim=0)
-        # # ood_token = torch.permute(ood_token,dims=[1,0])
-        # ood_output = self.ood_head(ood_token)
+        _ood_token = ood_token
+        ood_token = torch.flatten(ood_token, start_dim=1)
+        # ood_token = torch.squeeze(ood_token, dim=0)
+        # ood_token = torch.permute(ood_token,dims=[1,0])
+        ood_output = self.ood_head(ood_token)
 
         # classifier
         x = self.head(x[:, 0])
-        return x, ood_output
+        return x, ood_output, _ood_token
 
 
 if __name__ == '__main__':
